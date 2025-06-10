@@ -3,7 +3,7 @@ const app = express();
 const port = 8080;
 
 app.get("/healthcheck", (req, res) => {
-  res.send("It works!Node works !!");
+  res.send("It works! Node works !!");
 });
 
 app.listen(port, () => {
