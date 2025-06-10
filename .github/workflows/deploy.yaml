@@ -1,0 +1,52 @@
+name: Test and Deploy Node.js App
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build-test-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20" # Use latest stable version
+
+      - name: Install dependencies
+        run: |
+          npm install
+
+      - name: Run health-check test
+        run: |
+          node -e "
+          const http = require('http');
+          http.get('http://127.0.0.1:8080/healthcheck', res => {
+              process.exit(res.statusCode === 200 ? 0 : 1);
+          }).on('error', () => process.exit(1));
+          "
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v1.2.2 # latest stable tag
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          port: ${{ secrets.EC2_PORT }}
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            cd /home/ubuntu
+
+            # Pull latest code
+            rm -rf hello-node
+            git clone https://github.com/${{ github.repository }}.git hello-node
+
+            # Install dependencies
+            cd hello-node
+            npm install
+
+            # Restart the Node.js app
+            sudo systemctl restart nodeapp
