@@ -23,12 +23,7 @@ jobs:
 
       - name: Run health-check test
         run: |
-          node -e "
-          const http = require('http');
-          http.get('http://127.0.0.1:8080/healthcheck', res => {
-              process.exit(res.statusCode === 200 ? 0 : 1);
-          }).on('error', () => process.exit(1));
-          "
+          curl -f http://127.0.0.1:8080/healthcheck || exit 1
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.2 # latest stable tag
