@@ -26,7 +26,7 @@ jobs:
 
       - name: Run health-check test
         run: |
-          curl -f http://127.0.0.1:8080/healthcheck || exit 1
+          curl -f http://${{ secrets.EC2_HOST }}/healthcheck || exit 1
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.2 # latest stable tag
