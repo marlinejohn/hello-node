@@ -1,50 +1,120 @@
 name: Test and Deploy Node.js App
+# on:
+#   push:
+#     branches: [main]
+
+# jobs:
+#   build-test-deploy:
+#     runs-on: ubuntu-latest
+
+#     steps:
+#       - name: Check out code
+#         uses: actions/checkout@v4
+
+#       - name: Set up Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: "20" # Use latest stable version
+
+#       - name: Install dependencies
+#         run: |
+#           npm install
+
+#       - name: Wait for the app to start
+#         run: sleep 5 # Give time for the app to start
+
+#       - name: Run health-check test
+#         run: |
+#           curl -f http://${{ secrets.EC2_HOST }}/healthcheck || exit 1
+
+#       - name: Deploy to EC2
+#         uses: appleboy/ssh-action@v1.2.2 # latest stable tag
+#         with:
+#           host: ${{ secrets.EC2_HOST }}
+#           username: ${{ secrets.EC2_USER }}
+#           port: ${{ secrets.EC2_PORT }}
+#           key: ${{ secrets.EC2_KEY }}
+#           script: |
+#             cd /home/ubuntu
+
+#             # Pull latest code
+#             rm -rf hello-node
+#             git clone https://github.com/${{ github.repository }}.git hello-node
+
+#             # Install dependencies
+#             cd hello-node
+#             npm install
+
+#             # Restart the Node.js app
+#             sudo systemctl restart nodeapp
+
+name: Test and Deploy Node.js App
 
 on:
+  workflow_dispatch:
   push:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
+    - name: Check out code
+      uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20" # Use latest stable version
+    # 🔹 Testing Phase
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: "20"  # Use latest stable version
 
-      - name: Install dependencies
-        run: |
-          npm install
+    - name: Install dependencies
+      run: |
+        npm install
 
-      - name: Wait for the app to start
-        run: sleep 5 # Give time for the app to start
+    - name: Wait for the app to start
+      run: sleep 5  # Give time for the app to start
 
-      - name: Run health-check test
-        run: |
-          curl -f http://${{ secrets.EC2_HOST }}/healthcheck || exit 1
+    - name: Run health-check test
+      run: |
+        curl -f http://${{ secrets.EC2_HOST }}/healthcheck || exit 1
 
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.2.2 # latest stable tag
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USER }}
-          port: ${{ secrets.EC2_PORT }}
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            cd /home/ubuntu
+    # 🔹 Build & Push Docker Image
+    - name: Log in to Docker Hub
+      uses: docker/login-action@v2
+      with:
+        username: ${{ secrets.DOCKERHUB_USERNAME }}
+        password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-            # Pull latest code
-            rm -rf hello-node
-            git clone https://github.com/${{ github.repository }}.git hello-node
+    - name: Build and push image
+      uses: docker/build-push-action@v4
+      with:
+        context: .
+        push: true
+        tags: ${{ secrets.DOCKERHUB_USERNAME }}/noderino:${{ github.sha }},${{ secrets.DOCKERHUB_USERNAME }}/noderino:latest
 
-            # Install dependencies
-            cd hello-node
-            npm install
+    # 🔹 Deploy to EC2 Using Docker
+    - name: Deploy to EC2
+      uses: appleboy/ssh-action@v1.2.2
+      with:
+        host: ${{ secrets.EC2_HOST }}
+        username: ${{ secrets.EC2_USER }}
+        port: ${{ secrets.EC2_PORT }}
+        key: ${{ secrets.EC2_KEY }}
+        script: |
+          sudo apt update
+          sudo apt install docker.io -y
+          
+          # Pull latest Docker image
+          sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/noderino:${{ github.sha }}
 
-            # Restart the Node.js app
-            sudo systemctl restart nodeapp
+          # Stop and remove existing container if running
+          sudo docker stop noderino || true
+          sudo docker rm noderino || true
+
+          # Run the new container
+          sudo docker run -d \
+            --name noderino \
+            -p 80:8080 \
+            ${{ secrets.DOCKERHUB_USERNAME }}/noderino:${{ github.sha }}
