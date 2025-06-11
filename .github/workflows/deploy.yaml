@@ -21,6 +21,9 @@ jobs:
         run: |
           npm install
 
+      - name: Wait for the app to start
+        run: sleep 5 # Give time for the app to start
+
       - name: Run health-check test
         run: |
           curl -f http://127.0.0.1:8080/healthcheck || exit 1
